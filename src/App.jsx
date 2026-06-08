@@ -152,8 +152,7 @@ function calcAct(a) {
 function calcTodayTarget(a) {
   const rem_days = Math.max(1, diffDays(a.pf, TODAY));
   const rem_qty = Math.max(0, a.plan_qty - a.done_qty);
-  const round2 = (v) => Math.round(v * 100) / 100;
-  return { daily_target: round2(rem_qty / rem_days), plan_daily: round2(a.plan_qty / Math.max(1, a.orig_dur)), rem_qty, rem_days };
+  return { daily_target: Math.round(rem_qty / rem_days), plan_daily: Math.round(a.plan_qty / Math.max(1, a.orig_dur)), rem_qty, rem_days };
 }
 
 function recalcCPM(activities, changedId, delayDays) {
@@ -1046,7 +1045,7 @@ function Dashboard({ activities, progressReports, issues, weather, project }) {
   );
 }
 
-function ThreeWeekView({ activities, milestones, setMilestones, progressReports }) {
+function ThreeWeekView({ activities, milestones, setMilestones, progressReports, subActivities }) {
   const [weekOffset, setWeekOffset] = useState(0);
   const [weeklyPlans, setWeeklyPlans] = useState([]);
   const [showMilestoneForm, setShowMilestoneForm] = useState(false);
@@ -1102,51 +1101,139 @@ function ThreeWeekView({ activities, milestones, setMilestones, progressReports 
     const tStr = TODAY.getFullYear() + "-" + String(TODAY.getMonth() + 1).padStart(2, '0') + "-" + String(TODAY.getDate()).padStart(2, '0');
     let html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><style>table{border-collapse:collapse;font-family:'Malgun Gothic','맑은 고딕',sans-serif;font-size:11px;}th,td{border:1px solid #D1D5DB;vertical-align:middle;white-space:nowrap;height:24px;}.header{background-color:#1A2332;color:#ffffff;font-weight:bold;text-align:center;padding:6px;}.sub-header{background-color:#374151;color:#9CA3AF;text-align:center;padding:4px;}.title{font-size:18px;font-weight:bold;text-align:center;height:40px;border:none;}</style></head><body><table>`;
     let dateCols = [], actList = [];
+
+    // 1. 날짜 범위 및 대상 공종 추출
     if (viewMode === "3w") {
       const base = weeks && weeks.length > 0 ? new Date(weeks[0].start) : new Date(TODAY);
-      for (let i = 0; i < 21; i++) { const d = new Date(base); d.setDate(d.getDate() + i); const dStr = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,'0') + "-" + String(d.getDate()).padStart(2,'0'); dateCols.push({ str: dStr, label: String(d.getDate()), topLabel: `${d.getFullYear()}년 ${d.getMonth()+1}월`, type: "day" }); }
+      for (let i = 0; i < 21; i++) {
+        const d = new Date(base); d.setDate(d.getDate() + i);
+        const dStr = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,'0') + "-" + String(d.getDate()).padStart(2,'0');
+        dateCols.push({ str: dStr, label: String(d.getDate()), topLabel: `${d.getFullYear()}년 ${d.getMonth()+1}월`, type: "day" });
+      }
       actList = activities.filter(a => a.phys < 100 && a.ps <= dateCols[20].str && a.pf >= dateCols[0].str);
     } else if (viewMode === "3m") {
       const base = new Date(TODAY.getFullYear(), TODAY.getMonth()-1, 1);
-      for (let i = 0; i < 92; i++) { const d = new Date(base); d.setDate(d.getDate()+i); const dStr = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,'0') + "-" + String(d.getDate()).padStart(2,'0'); dateCols.push({ str: dStr, label: String(d.getDate()), topLabel: `${d.getFullYear()}년 ${d.getMonth()+1}월`, type: "day" }); }
+      for (let i = 0; i < 92; i++) {
+        const d = new Date(base); d.setDate(d.getDate()+i);
+        const dStr = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,'0') + "-" + String(d.getDate()).padStart(2,'0');
+        dateCols.push({ str: dStr, label: String(d.getDate()), topLabel: `${d.getFullYear()}년 ${d.getMonth()+1}월`, type: "day" });
+      }
       actList = activities.filter(a => a.phys < 100 && a.ps <= dateCols[dateCols.length-1].str && a.pf >= dateCols[0].str);
     } else {
       const allPs = activities.map(a => a.ps).filter(Boolean).sort()[0];
       const allPf = activities.map(a => a.pf).filter(Boolean).sort().reverse()[0];
       if (!allPs || !allPf) { alert("공정 데이터가 없습니다."); return; }
       const totalDays = diffDays(allPf, allPs) + 1;
-      if (totalDays > 365*3) { let cur = new Date(allPs.slice(0,7)+"-01"); const end = new Date(allPf.slice(0,7)+"-01"); while (cur <= end) { const dStr = cur.getFullYear()+"-"+String(cur.getMonth()+1).padStart(2,'0'); dateCols.push({ str: dStr, label: `${cur.getMonth()+1}월`, topLabel: `${cur.getFullYear()}년`, type: "month" }); cur.setMonth(cur.getMonth()+1); } }
-      else if (totalDays > 365) { let cur = new Date(allPs); const end = new Date(allPf); while (cur <= end) { const dStr = cur.getFullYear()+"-"+String(cur.getMonth()+1).padStart(2,'0')+"-"+String(cur.getDate()).padStart(2,'0'); dateCols.push({ str: dStr, label: `${cur.getMonth()+1}/${cur.getDate()}`, topLabel: `${cur.getFullYear()}년 ${cur.getMonth()+1}월`, type: "week" }); cur.setDate(cur.getDate()+7); } }
-      else { let cur = new Date(allPs); const end = new Date(allPf); while (cur <= end) { const dStr = cur.getFullYear()+"-"+String(cur.getMonth()+1).padStart(2,'0')+"-"+String(cur.getDate()).padStart(2,'0'); dateCols.push({ str: dStr, label: String(cur.getDate()), topLabel: `${cur.getFullYear()}년 ${cur.getMonth()+1}월`, type: "day" }); cur.setDate(cur.getDate()+1); } }
+      if (totalDays > 365*3) {
+        let cur = new Date(allPs.slice(0,7)+"-01"); const end = new Date(allPf.slice(0,7)+"-01");
+        while (cur <= end) { const dStr = cur.getFullYear()+"-"+String(cur.getMonth()+1).padStart(2,'0'); dateCols.push({ str: dStr, label: `${cur.getMonth()+1}월`, topLabel: `${cur.getFullYear()}년`, type: "month" }); cur.setMonth(cur.getMonth()+1); }
+      } else if (totalDays > 365) {
+        let cur = new Date(allPs); const end = new Date(allPf);
+        while (cur <= end) { const dStr = cur.getFullYear()+"-"+String(cur.getMonth()+1).padStart(2,'0')+"-"+String(cur.getDate()).padStart(2,'0'); dateCols.push({ str: dStr, label: `${cur.getMonth()+1}/${cur.getDate()}`, topLabel: `${cur.getFullYear()}년 ${cur.getMonth()+1}월`, type: "week" }); cur.setDate(cur.getDate()+7); }
+      } else {
+        let cur = new Date(allPs); const end = new Date(allPf);
+        while (cur <= end) { const dStr = cur.getFullYear()+"-"+String(cur.getMonth()+1).padStart(2,'0')+"-"+String(cur.getDate()).padStart(2,'0'); dateCols.push({ str: dStr, label: String(cur.getDate()), topLabel: `${cur.getFullYear()}년 ${cur.getMonth()+1}월`, type: "day" }); cur.setDate(cur.getDate()+1); }
+      }
       actList = activities;
     }
+
+    // 2. 엑셀 테이블 헤더 생성
     html += `<tr><td colspan="${dateCols.length+3}" class="title">${title}</td></tr>`;
     html += `<tr><th class="header" rowspan="2" width="100">대공종</th><th class="header" rowspan="2" width="220">공종명</th><th class="header" rowspan="2" width="60">진도율</th>`;
+
     let curTop = null, count = 0;
-    dateCols.forEach(c => { if (curTop !== c.topLabel) { if (curTop !== null) html += `<th class="header" colspan="${count}">${curTop}</th>`; curTop = c.topLabel; count = 1; } else { count++; } });
+    dateCols.forEach(c => {
+      if (curTop !== c.topLabel) {
+        if (curTop !== null) html += `<th class="header" colspan="${count}">${curTop}</th>`;
+        curTop = c.topLabel; count = 1;
+      } else { count++; }
+    });
     if (curTop !== null) html += `<th class="header" colspan="${count}">${curTop}</th>`;
+
     html += `</tr><tr>`;
     dateCols.forEach(c => { html += `<th class="sub-header" width="22">${c.label}</th>`; });
     html += `</tr>`;
+
+    // 3. 대공종별 그룹핑
     const grouped = {};
     actList.forEach(a => { const cat = a.category || "건축"; if (!grouped[cat]) grouped[cat] = []; grouped[cat].push(a); });
+
+    // 4. 엑셀 데이터 출력
     Object.entries(grouped).forEach(([cat, acts]) => {
-      html += `<tr><td style="background-color:#1A2332;color:#fff;font-weight:bold;text-align:center;" rowspan="${acts.length*2}">${cat}</td>`;
+
+      // 대공종별 총 row 수 사전 계산 (세부공종 포함)
+      let catRowCount = 0;
+      acts.forEach(a => {
+        catRowCount += 2;
+        if (viewMode === "3w" && subActivities) {
+          const subs = subActivities.filter(sub => sub.activity_id === a.id && sub.status === "active" && sub.start_date);
+          const activeOverlappingSubs = subs.filter(sub => {
+             const subEndStr = sub.end_date || a.pf || sub.start_date;
+             return sub.start_date <= dateCols[20].str && subEndStr >= dateCols[0].str;
+          });
+          catRowCount += activeOverlappingSubs.length * 2;
+        }
+      });
+
+      html += `<tr><td style="background-color:#1A2332;color:#fff;font-weight:bold;text-align:center;" rowspan="${catRowCount}">${cat}</td>`;
+
       acts.forEach((a, ai) => {
         if (ai > 0) html += `<tr>`;
+
+        // --- 상위 공종 (계획 줄) ---
         html += `<td style="padding:4px 8px;font-weight:bold;border-bottom:2px solid #9CA3AF;" rowspan="2">${a.sub_group && a.sub_group !== "-" ? `(${a.sub_group}) ` : ""}${a.name}${a.delay_days > 0 ? ` (+${a.delay_days}일)` : ""}</td>`;
         html += `<td style="text-align:center;font-weight:bold;border-bottom:2px solid #9CA3AF;" rowspan="2">${a.phys||0}%</td>`;
+
         dateCols.forEach(c => {
           let isPlan = c.type === "month" ? c.str >= a.ps.slice(0,7) && c.str <= a.pf.slice(0,7) : c.type === "week" ? (() => { const wEnd = new Date(c.str); wEnd.setDate(wEnd.getDate()+6); const wEndStr = wEnd.getFullYear()+"-"+String(wEnd.getMonth()+1).padStart(2,'0')+"-"+String(wEnd.getDate()).padStart(2,'0'); return wEndStr >= a.ps && c.str <= a.pf; })() : c.str >= a.ps && c.str <= a.pf;
           html += `<td style="background-color:${isPlan ? "#10B981" : c.str === tStr ? "#FEF2F2" : "transparent"};height:14px;border-bottom:1px dotted #D1D5DB;"></td>`;
         });
         html += `</tr><tr>`;
+
+        // --- 상위 공종 (실적 줄) ---
         dateCols.forEach(c => {
           let isActual = false;
           if (a.as_) { const afStr = a.af && a.af <= tStr ? a.af : tStr; isActual = c.type === "month" ? c.str >= a.as_.slice(0,7) && c.str <= afStr.slice(0,7) : c.type === "week" ? (() => { const wEnd = new Date(c.str); wEnd.setDate(wEnd.getDate()+6); const wEndStr = wEnd.getFullYear()+"-"+String(wEnd.getMonth()+1).padStart(2,'0')+"-"+String(wEnd.getDate()).padStart(2,'0'); return wEndStr >= a.as_ && c.str <= afStr; })() : c.str >= a.as_ && c.str <= afStr; }
           html += `<td style="background-color:${isActual ? "#3B82F6" : c.str === tStr ? "#FEF2F2" : "transparent"};height:14px;border-top:none;border-bottom:2px solid #9CA3AF;"></td>`;
         });
         html += `</tr>`;
+
+        // --- 세부 공종 (계획/실적 줄 추가) ---
+        if (viewMode === "3w" && subActivities) {
+          const subs = subActivities.filter(sub => sub.activity_id === a.id && sub.status === "active" && sub.start_date);
+          const activeOverlappingSubs = subs.filter(sub => {
+             const subEndStr = sub.end_date || a.pf || sub.start_date;
+             return sub.start_date <= dateCols[20].str && subEndStr >= dateCols[0].str;
+          });
+
+          activeOverlappingSubs.forEach(sub => {
+            const subEndStr = sub.end_date || a.pf || sub.start_date;
+
+            html += `<tr>`;
+            html += `<td style="padding:4px 8px 4px 20px; color:#555; text-align:left; border-bottom:1px dotted #D1D5DB;">└ ${sub.name} <span style="color:#10B981; font-size:10px;">[계획]</span></td>`;
+            html += `<td style="text-align:center; color:#555; border-bottom:1px dotted #D1D5DB;">-</td>`;
+            dateCols.forEach(c => {
+              const isPlan = (c.str >= sub.start_date && c.str <= subEndStr);
+              html += `<td style="background-color:${isPlan ? '#10B981' : 'transparent'}; height:14px; border-bottom:1px dotted #D1D5DB;"></td>`;
+            });
+            html += `</tr>`;
+
+            html += `<tr>`;
+            html += `<td style="padding:4px 8px 4px 30px; color:#555; text-align:left; border-bottom:1px dashed #9CA3AF; font-size:11px;">└ 진도율 <span style="color:#3B82F6; font-size:10px;">[실적]</span></td>`;
+            html += `<td style="text-align:center; color:#555; border-bottom:1px dashed #9CA3AF;">${sub.phys||0}%</td>`;
+            dateCols.forEach(c => {
+              let actualBg = "transparent";
+              const actualStart = sub.as_ || sub.actual_start_date || sub.start_date;
+              if (sub.phys === 100) {
+                if (c.str >= sub.start_date && c.str <= subEndStr) actualBg = "#3B82F6";
+              } else {
+                if (c.str >= actualStart && c.str <= tStr) actualBg = "#93C5FD";
+              }
+              html += `<td style="background-color:${actualBg}; height:14px; border-bottom:1px dashed #9CA3AF;"></td>`;
+            });
+            html += `</tr>`;
+          });
+        }
       });
     });
     html += `<tr><td colspan="${dateCols.length+3}" style="text-align:right;padding:10px;font-weight:bold;border:none;"><span style="background-color:#10B981;color:#10B981;">__</span> 계획 <span style="background-color:#3B82F6;color:#3B82F6;margin-left:10px;">__</span> 실적</td></tr></table></body></html>`;
@@ -1550,18 +1637,6 @@ JSON만 반환: [{"id":<공종ID>,"weight":<가중치숫자>}]
             {weekOffset === 0 && <span style={{ fontSize: 11, color: YELLOW, marginLeft: 6 }}>이번주</span>}
           </div>
           <button onClick={() => setWeekOffset(w => w + 1)} style={{ background: "#fff", border: "1.5px solid #E5E7EB", borderRadius: 8, width: 34, height: 34, cursor: "pointer", fontSize: 16 }}>→</button>
-          <input type="date"
-            value={dayStr(weeks[1].start)}
-            onChange={e => {
-              const d = new Date(e.target.value);
-              const day = d.getDay();
-              const monday = new Date(d);
-              monday.setDate(d.getDate() - day + (day === 0 ? -6 : 1));
-              const diff = Math.round((monday - getMonday(0)) / (7 * 86400000));
-              setWeekOffset(diff);
-            }}
-            style={{ border: "1.5px solid #E5E7EB", borderRadius: 8, padding: "0 10px", height: 34, fontSize: 13, outline: "none" }}
-          />
           <button onClick={() => setWeekOffset(0)} style={{ background: weekOffset === 0 ? NAVY : "#fff", border: `1.5px solid ${weekOffset === 0 ? NAVY : "#E5E7EB"}`, borderRadius: 8, padding: "0 12px", height: 34, cursor: "pointer", fontSize: 12, fontWeight: 600, color: weekOffset === 0 ? "#fff" : "#374151" }}>오늘</button>
           {/* 뷰 토글 */}
           <div style={{ display: "flex", background: "#F3F4F6", borderRadius: 8, padding: 3, gap: 2 }}>
@@ -1786,39 +1861,101 @@ JSON만 반환: [{"id":<공종ID>,"weight":<가중치숫자>}]
                   const actualSi = a.as_ ? Math.max(0, findColIdx(a.as_)) : -1;
                   const actualEndStr = a.af && a.af <= todayStr ? a.af : todayStr;
                   const actualEi = actualSi >= 0 ? Math.min(cols.length - 1, findColIdxEnd(actualEndStr)) : -1;
-                  return (
-                    <div key={a.id} style={{ display: "flex", borderBottom: "1px solid #E5E7EB", background: ai % 2 === 0 ? "#fff" : "#FAFAFA", minWidth: LEFT_W + totalColW }}>
-                      <div style={{ width: LEFT_W, flexShrink: 0, borderRight: "1px solid #E5E7EB", padding: "5px 12px" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 1 }}>
-                          {a.critical && <span style={{ fontSize: 9, background: "#FEE2E2", color: "#991B1B", borderRadius: 3, padding: "1px 4px", fontWeight: 700 }}>CP</span>}
-                          {a.delay_days > 0 && <span style={{ fontSize: 9, background: "#FEF3C7", color: "#92400E", borderRadius: 3, padding: "1px 4px", fontWeight: 700 }}>+{a.delay_days}일</span>}
-                        </div>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: NAVY }}>{a.name}</div>
-                        <div style={{ fontSize: 9, color: "#9CA3AF" }}>{a.subcon !== "미정" ? a.subcon + " · " : ""}{a.phys}%</div>
-                      </div>
-                      <div style={{ flex: 1, position: "relative", height: 48 }}>
-                        {/* 셀 배경 */}
-                        <div style={{ display: "flex", height: "100%", position: "absolute", inset: 0 }}>
-                          {cols.map((c, ci) => (
-                            <div key={ci} style={{ width: COL_W, flexShrink: 0, borderRight: `1px solid ${useMonthly ? "#E5E7EB" : c.dow === 0 ? "#E5E7EB" : "#F9FAFB"}`, background: (useMonthly ? c.str.slice(0, 7) === todayStr.slice(0, 7) : ci === todayIdx) ? "#FFFDE7" : (!useMonthly && c.dow === 0) ? "#FFF5F5" : "transparent", height: "100%" }} />
-                          ))}
-                        </div>
-                        {/* 계획 바 */}
-                        {planSi >= 0 && planEi >= 0 && planSi <= planEi && (
-                          <div style={{ position: "absolute", top: 8, left: planSi * COL_W + 1, width: (planEi - planSi + 1) * COL_W - 2, height: 10, background: "#10B981", borderRadius: 5, zIndex: 2, display: "flex", alignItems: "center", paddingLeft: 4, overflow: "hidden" }}>
-                            <span style={{ fontSize: 8, color: "#fff", fontWeight: 600, whiteSpace: "nowrap" }}>{a.ps?.slice(5)}~{a.pf?.slice(5)}</span>
+                  // 3주 기간에 겹치는 세부공정 필터링
+                    const rangeStart = days[0].str;
+                    const rangeEnd = days[20].str;
+                    const activeOverlappingSubs = (subActivities || []).filter((sub) => {
+                      if (sub.activity_id !== a.id || sub.status !== "active") return false;
+                      const subStart = sub.start_date;
+                      const subEnd = sub.end_date || a.pf || sub.start_date;
+                      if (!subStart) return false;
+                      return subStart <= rangeEnd && subEnd >= rangeStart;
+                    });
+
+                    return (
+                      <React.Fragment key={a.id}>
+                        {/* 1. 상위 공종 행 */}
+                        <div style={{ display: "flex", borderBottom: "1px solid #E5E7EB", background: ai % 2 === 0 ? "#fff" : "#FAFAFA" }}>
+                          <div style={{ width: LEFT_W, flexShrink: 0, borderRight: "1px solid #E5E7EB", padding: "6px 12px" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 2 }}>
+                              {a.critical && <span style={{ fontSize: 9, background: "#FEE2E2", color: "#991B1B", borderRadius: 3, padding: "1px 4px", fontWeight: 700 }}>CP</span>}
+                              {isUnderAchieved && <span style={{ fontSize: 9, background: "#FEE2E2", color: "#991B1B", borderRadius: 3, padding: "1px 4px", fontWeight: 700 }}>⚠️</span>}
+                              {a.delay_days > 0 && <span style={{ fontSize: 9, background: "#FEF3C7", color: "#92400E", borderRadius: 3, padding: "1px 4px", fontWeight: 700 }}>+{a.delay_days}일</span>}
+                            </div>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: NAVY }}>{a.name}</div>
+                            <div style={{ fontSize: 10, color: "#9CA3AF" }}>{a.subcon !== "미정" ? a.subcon + " · " : ""}{a.phys}%</div>
+                            <input defaultValue={plan?.note || ""} placeholder="특이사항" onBlur={e => handlePlanSave(a.id, weeks[1].startStr, "note", e.target.value)} style={{ marginTop: 3, width: "100%", border: "1px solid #E5E7EB", borderRadius: 4, padding: "2px 6px", fontSize: 10, outline: "none", boxSizing: "border-box", background: "transparent" }} />
                           </div>
-                        )}
-                        {/* 실적 바 */}
-                        {actualSi >= 0 && actualEi >= 0 && actualSi <= actualEi && (
-                          <div style={{ position: "absolute", top: 28, left: actualSi * COL_W + 1, width: (actualEi - actualSi + 1) * COL_W - 2, height: 10, background: "#3B82F6", borderRadius: 5, zIndex: 2, display: "flex", alignItems: "center", paddingLeft: 4, overflow: "hidden" }}>
-                            <span style={{ fontSize: 8, color: "#fff", fontWeight: 600, whiteSpace: "nowrap" }}>{a.as_?.slice(5)}{a.af ? `~${a.af.slice(5)}` : "~"}</span>
+                          <div style={{ flex: 1, position: "relative", height: 64, minWidth: DAY_W * 21 }}>
+                            <div style={{ display: "flex", height: "100%", position: "absolute", inset: 0 }}>
+                              {days.map((d, di) => (
+                                <div key={di} style={{ width: DAY_W, flexShrink: 0, borderRight: `1px solid ${di % 7 === 6 ? "#D1D5DB" : "#F3F4F6"}`, background: d.str === todayStr ? "#FFFDE7" : d.dow === 0 ? "#FFF5F5" : Math.floor(di / 7) === 0 ? "#F8FAFF" : Math.floor(di / 7) === 1 ? "#FFFBEB" : "#F0FDF4", height: "100%" }} />
+                              ))}
+                            </div>
+                            {planSi >= 0 && planEi >= 0 && (
+                              <div style={{ position: "absolute", top: 10, left: planSi * DAY_W + 2, width: (planEi - planSi + 1) * DAY_W - 4, height: 12, background: "#10B981", borderRadius: 6, zIndex: 2, display: "flex", alignItems: "center", paddingLeft: 6, overflow: "hidden" }}>
+                                <span style={{ fontSize: 9, color: "#fff", fontWeight: 600, whiteSpace: "nowrap" }}>계획 {a.ps?.slice(5)}~{a.pf?.slice(5)}</span>
+                              </div>
+                            )}
+                            {actualSi >= 0 && actualEi >= 0 && (
+                              <div style={{ position: "absolute", top: 34, left: actualSi * DAY_W + 2, width: (actualEi - actualSi + 1) * DAY_W - 4, height: 12, background: "#3B82F6", borderRadius: 6, zIndex: 2, display: "flex", alignItems: "center", paddingLeft: 6, overflow: "hidden" }}>
+                                <span style={{ fontSize: 9, color: "#fff", fontWeight: 600, whiteSpace: "nowrap" }}>실적 {a.as_?.slice(5)}{a.af ? `~${a.af.slice(5)}` : "~"}</span>
+                              </div>
+                            )}
+                            {todayIdx >= 0 && <div style={{ position: "absolute", left: todayIdx * DAY_W + DAY_W / 2, top: 0, bottom: 0, width: 2, background: "#EF4444", zIndex: 5 }} />}
                           </div>
-                        )}
-                        {/* 오늘 기준선 */}
-                        {todayIdx >= 0 && <div style={{ position: "absolute", left: todayIdx * COL_W + COL_W / 2, top: 0, bottom: 0, width: 2, background: "#EF4444", zIndex: 5 }} />}
-                      </div>
-                    </div>
+                        </div>
+
+                        {/* 2. 세부 공종 행 */}
+                        {activeOverlappingSubs.map((sub) => {
+                          const subEndStr = sub.end_date || a.pf || sub.start_date;
+                          const actualStart = sub.as_ || sub.actual_start_date || sub.start_date;
+
+                          return (
+                            <React.Fragment key={`sub-${sub.id}`}>
+                              {/* 계획 줄 */}
+                              <div style={{ display: "flex", borderBottom: "1px dotted #F3F4F6", background: "#FAFAFA" }}>
+                                <div style={{ width: LEFT_W, flexShrink: 0, borderRight: "1px solid #E5E7EB", padding: "2px 12px 2px 24px", display: "flex", alignItems: "center" }}>
+                                  <div style={{ fontSize: 11, color: "#4B5563" }}>└ {sub.name} <span style={{fontSize: 9, color: "#10B981", marginLeft: 4}}>[계획]</span></div>
+                                </div>
+                                <div style={{ flex: 1, display: "flex", height: 22, minWidth: DAY_W * 21, position: "relative" }}>
+                                  {days.map((d, di) => (
+                                    <div key={di} style={{ width: DAY_W, flexShrink: 0, borderRight: `1px solid ${di % 7 === 6 ? "#D1D5DB" : "#F3F4F6"}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                      {(d.str >= sub.start_date && d.str <= subEndStr) && <div style={{ width: "100%", height: "8px", background: "#10B981", borderRadius: 2 }} />}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+
+                              {/* 실적 줄 */}
+                              <div style={{ display: "flex", borderBottom: "1px dashed #E5E7EB", background: "#fff" }}>
+                                <div style={{ width: LEFT_W, flexShrink: 0, borderRight: "1px solid #E5E7EB", padding: "2px 12px 2px 24px", display: "flex", alignItems: "center" }}>
+                                  <div style={{ fontSize: 11, color: "#4B5563", paddingLeft: 12 }}>
+                                    └ 진도: {sub.phys || 0}%
+                                    <span style={{fontSize: 9, color: "#3B82F6", marginLeft: 4}}>[실적]</span>
+                                  </div>
+                                </div>
+                                <div style={{ flex: 1, display: "flex", height: 22, minWidth: DAY_W * 21, position: "relative" }}>
+                                  {days.map((d, di) => {
+                                    let actualBg = null;
+                                    const actualStart = sub.as_ || sub.actual_start_date || sub.start_date;
+                                    if (sub.phys === 100) {
+                                      if (d.str >= sub.start_date && d.str <= subEndStr) actualBg = "#3B82F6";
+                                    } else {
+                                      if (d.str >= actualStart && d.str <= todayStr) actualBg = "#93C5FD";
+                                    }
+                                    return (
+                                      <div key={di} style={{ width: DAY_W, flexShrink: 0, borderRight: `1px solid ${di % 7 === 6 ? "#D1D5DB" : "#F3F4F6"}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                        {actualBg && <div style={{ width: "100%", height: "8px", background: actualBg, borderRadius: 2 }} />}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </React.Fragment>
+                          );
+                        })}
+                      </React.Fragment>
                   );
                 })}
               </div>
@@ -2410,31 +2547,7 @@ function DailyReport({ activities, progressReports, issues, equipment, equipment
 
       {/* 버튼 */}
       <div className="no-print" style={{ display: "flex", justifyContent: "center", gap: 12, marginBottom: 14 }}>
-       <button onClick={() => {
-          const content = document.getElementById("dr-content");
-          if (!content) return;
-          const clone = content.cloneNode(true);
-          clone.querySelectorAll("*").forEach(el => {
-            el.style.maxHeight = "";
-            el.style.overflow = "";
-            el.style.overflowY = "";
-            el.style.height = "";
-          });
-          const w = window.open("", "_blank");
-          w.document.write(`<!DOCTYPE html><html><head>
-            <meta charset="utf-8"><title>공사일지</title>
-            <style>
-              * { box-sizing: border-box; }
-              body { font-family: 'Malgun Gothic','맑은 고딕',sans-serif; font-size: 11px; line-height: 1.6; color: #1a1a1a; }
-              table { border-collapse: collapse; width: 100%; }
-              th, td { border: 1px solid #D1D5DB; padding: 5px 8px; vertical-align: top; }
-              @page { size: A4; margin: 12mm; }
-            </style>
-          </head><body>${clone.outerHTML}</body></html>`);
-          w.document.close();
-          w.focus();
-          setTimeout(() => w.print(), 1000);
-        }} style={{ background: "#10B981", border: "none", borderRadius: 8, padding: "10px 24px", fontWeight: 700, fontSize: 14, color: "#fff", cursor: "pointer" }}>🖨️ PDF 출력 / 인쇄</button>
+        <button onClick={() => window.print()} style={{ background: "#10B981", border: "none", borderRadius: 8, padding: "10px 24px", fontWeight: 700, fontSize: 14, color: "#fff", cursor: "pointer" }}>🖨️ PDF 출력 / 인쇄</button>
         <button onClick={onClose} style={{ background: "#6B7280", border: "none", borderRadius: 8, padding: "10px 24px", fontWeight: 700, fontSize: 14, color: "#fff", cursor: "pointer" }}>✕ 닫기</button>
       </div>
 
@@ -6770,7 +6883,7 @@ function DesktopView({ activities, setActivities, progressReports, setProgressRe
               logs={equipmentLogs}
               setLogs={setEquipmentLogs}
             />)}
-          {activeMenu === "3w" && <ThreeWeekView activities={activities} milestones={milestones} setMilestones={setMilestones} progressReports={progressReports} />}
+          {activeMenu === "3w" && <ThreeWeekView activities={activities} milestones={milestones} setMilestones={setMilestones} progressReports={progressReports} subActivities={subActivities} />}
           {activeMenu === "issues" && <IssueTracker issues={issues} setIssues={setIssues} activities={activities} setActivities={setActivities} setToast={setToast} />}
           {activeMenu === "docs" && <DocumentVault />}
           {activeMenu === "approval" && <ApprovalPanel activities={activities} setActivities={setActivities} progressReports={progressReports} setProgressReports={setProgressReports} issues={issues} setIssues={setIssues} setToast={setToast} sendPush={sendPush} subActivities={subActivities} setSubActivities={setSubActivities} setEquipmentLogs={setEquipmentLogs} />}        </div>
